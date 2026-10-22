@@ -1,0 +1,6 @@
+{
+  "name": "TE@M Sales Tracker",
+  "description": "Herramienta profesional de seguimiento y control de ventas mensuales, cálculo de incentivos, bonus por producto, ritmo y proyecciones de cierre.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
