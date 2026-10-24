@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import {
   CampaignSettings,
   CategoryId,
@@ -9,8 +9,9 @@ import {
   Sale,
 } from '@/types';
 import { calculateDashboardStats } from '@/lib/calculations';
-import { exportSalesToCSV } from '@/lib/csv';
+import { exportSalesToCSV, CSVExportOptions } from '@/lib/csv';
 import {
+  DEFAULT_MILESTONE_NOTIFICATIONS,
   getDefaultSettings,
   repository,
 } from '@/lib/storage';
@@ -27,8 +28,11 @@ interface SalesTrackerContextType {
   settings: CampaignSettings;
   stats: DashboardStats;
   loading: boolean;
-  toast: { message: string; type: 'success' | 'error' | 'info' } | null;
+  toast: { message: string; type: 'success' | 'error' | 'info' | 'milestone' } | null;
   hasDemoData: boolean;
+  activeMilestone: 80 | 100 | 120 | null;
+  triggerMilestoneToast: (milestone: 80 | 100 | 120) => void;
+  dismissToast: () => void;
   
   // Administración y permisos
   isAdmin: boolean;
@@ -68,22 +72,62 @@ interface SalesTrackerContextType {
   // Export / Import / Backup
   exportDataJSON: () => Promise<void>;
   importDataJSON: (jsonString: string) => Promise<boolean>;
-  exportSalesCSV: () => void;
+  exportSalesCSV: (customSales?: Sale[] | unknown, customFilename?: string, options?: CSVExportOptions) => void;
   clearDemoData: () => Promise<void>;
   resetToDefaults: () => Promise<void>;
 
   // Feedback UI
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
+  showToast: (message: string, type?: 'success' | 'error' | 'info' | 'milestone') => void;
 }
 
 const SalesTrackerContext = createContext<SalesTrackerContextType | null>(null);
+
+const isMilestoneLevelEnabled = (milestone: 80 | 100 | 120, currentSettings?: CampaignSettings): boolean => {
+  return currentSettings?.milestoneNotifications?.[milestone]?.enabled ?? true;
+};
+
+// Helper puro para obtener el escalón de hito alcanzado (80, 100, 120)
+const getRawMilestoneFromProgress = (progress: number, totalTarget: number): 80 | 100 | 120 | null => {
+  if (totalTarget <= 0) return null;
+  if (progress >= 120) return 120;
+  if (progress >= 100) return 100;
+  if (progress >= 80) return 80;
+  return null;
+};
+
+const getEnabledMilestoneFromProgress = (
+  progress: number,
+  totalTarget: number,
+  currentSettings?: CampaignSettings
+): 80 | 100 | 120 | null => {
+  if (totalTarget <= 0) return null;
+  if (progress >= 120 && isMilestoneLevelEnabled(120, currentSettings)) return 120;
+  if (progress >= 100 && isMilestoneLevelEnabled(100, currentSettings)) return 100;
+  if (progress >= 80 && isMilestoneLevelEnabled(80, currentSettings)) return 80;
+  return null;
+};
+
+const formatMilestoneMessage = (
+  milestone: 80 | 100 | 120,
+  progress: number,
+  totalSales: number,
+  totalTarget: number,
+  currentSettings?: CampaignSettings
+) => {
+  const customMsg =
+    currentSettings?.milestoneNotifications?.[milestone]?.customMessage?.trim() ||
+    DEFAULT_MILESTONE_NOTIFICATIONS[milestone].customMessage;
+  return `${customMsg} (${progress}% • ${totalSales}/${totalTarget} uds)`;
+};
 
 export function SalesTrackerProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<CampaignSettings>(getDefaultSettings());
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' | 'milestone' } | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevMilestoneRef = useRef<80 | 100 | 120 | null | undefined>(undefined);
 
   // Estado de administración
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -91,13 +135,28 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [loginModalReason, setLoginModalReason] = useState<string>('');
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' = 'success') => {
-    setToast({ message, type });
-    const timer = setTimeout(() => {
-      setToast(null);
-    }, 3500);
-    return () => clearTimeout(timer);
+  const dismissToast = useCallback(() => {
+    if (toastTimerRef.current) {
+      clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToast(null);
   }, []);
+
+  const showToast = useCallback(
+    (message: string, type: 'success' | 'error' | 'info' | 'milestone' = 'success') => {
+      if (toastTimerRef.current) {
+        clearTimeout(toastTimerRef.current);
+      }
+      setToast({ message, type });
+      const duration = type === 'milestone' ? 5500 : 3500;
+      toastTimerRef.current = setTimeout(() => {
+        setToast(null);
+        toastTimerRef.current = null;
+      }, duration);
+    },
+    []
+  );
 
   // Control de modales y autenticación admin
   const openLoginModal = useCallback((reason?: string) => {
@@ -185,6 +244,27 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         setSettings(loadedSettings);
         setProducts(loadedProducts);
         setSales(loadedSales);
+
+        const initialStats = calculateDashboardStats(loadedSales, loadedSettings, loadedProducts, new Date());
+        const initialRawMilestone = getRawMilestoneFromProgress(initialStats.overallProgress, initialStats.totalTarget);
+        prevMilestoneRef.current = initialRawMilestone;
+        const initialEnabledMilestone = getEnabledMilestoneFromProgress(
+          initialStats.overallProgress,
+          initialStats.totalTarget,
+          loadedSettings
+        );
+        if (initialEnabledMilestone !== null) {
+          showToast(
+            formatMilestoneMessage(
+              initialEnabledMilestone,
+              initialStats.overallProgress,
+              initialStats.totalSales,
+              initialStats.totalTarget,
+              loadedSettings
+            ),
+            'milestone'
+          );
+        }
       } catch (err) {
         console.error('Error cargando datos:', err);
         showToast('Error al cargar datos locales', 'error');
@@ -199,6 +279,25 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
   const stats = useMemo(() => {
     return calculateDashboardStats(sales, settings, products, new Date());
   }, [sales, settings, products]);
+
+  // Determinar hito mensual alcanzado y habilitado (80%, 100%, 120%)
+  const activeMilestone: 80 | 100 | 120 | null = useMemo(() => {
+    return getEnabledMilestoneFromProgress(stats.overallProgress, stats.totalTarget, settings);
+  }, [stats.overallProgress, stats.totalTarget, settings]);
+
+  const triggerMilestoneToast = useCallback(
+    (milestone: 80 | 100 | 120) => {
+      if (!isMilestoneLevelEnabled(milestone, settings)) {
+        showToast(`Las alertas visuales para el hito del ${milestone}% están desactivadas en Configuración`, 'info');
+        return;
+      }
+      showToast(
+        formatMilestoneMessage(milestone, stats.overallProgress, stats.totalSales, stats.totalTarget, settings),
+        'milestone'
+      );
+    },
+    [showToast, stats.overallProgress, stats.totalSales, stats.totalTarget, settings]
+  );
 
   const hasDemoData = useMemo(() => {
     return sales.some((s) => s.isDemo);
@@ -234,11 +333,36 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         createdAt: new Date().toISOString(),
       };
 
+      const updatedSales = [newSale, ...sales];
       await repository.addSale(newSale);
-      setSales((prev) => [newSale, ...prev]);
-      showToast(`Venta registrada correctamente (+${newSale.quantity} ${newSale.productName})`);
+      setSales(updatedSales);
+
+      const nextStats = calculateDashboardStats(updatedSales, settings, products, new Date());
+      const nextRawMilestone = getRawMilestoneFromProgress(nextStats.overallProgress, nextStats.totalTarget);
+      const prevMilestoneVal = prevMilestoneRef.current ?? 0;
+      const nextMilestoneVal = nextRawMilestone ?? 0;
+      prevMilestoneRef.current = nextRawMilestone;
+
+      if (
+        nextRawMilestone !== null &&
+        nextMilestoneVal > prevMilestoneVal &&
+        isMilestoneLevelEnabled(nextRawMilestone, settings)
+      ) {
+        showToast(
+          formatMilestoneMessage(
+            nextRawMilestone,
+            nextStats.overallProgress,
+            nextStats.totalSales,
+            nextStats.totalTarget,
+            settings
+          ),
+          'milestone'
+        );
+      } else {
+        showToast(`Venta registrada correctamente (+${newSale.quantity} ${newSale.productName})`);
+      }
     },
-    [products, showToast, checkAdminPermission]
+    [products, sales, settings, showToast, checkAdminPermission]
   );
 
   // Registro rápido por gama (requiere admin)
@@ -457,10 +581,32 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
     [showToast, checkAdminPermission]
   );
 
-  const exportSalesCSV = useCallback(() => {
-    exportSalesToCSV(sales, `ventas-${settings.storeCode || 'team'}-${settings.year}-${settings.month}.csv`);
-    showToast('Ventas exportadas a CSV');
-  }, [sales, settings, showToast]);
+  const exportSalesCSV = useCallback(
+    (customSales?: Sale[] | unknown, customFilename?: string, options?: CSVExportOptions) => {
+      const targetSales = Array.isArray(customSales) ? (customSales as Sale[]) : sales;
+      if (targetSales.length === 0) {
+        showToast('No hay registros de ventas para exportar a CSV', 'info');
+        return;
+      }
+
+      const monthPadded = String(settings.month).padStart(2, '0');
+      const defaultFilename = `ventas-${settings.storeCode || 'team'}-${settings.year}-${monthPadded}.csv`;
+      const filename = typeof customFilename === 'string' && customFilename.trim() ? customFilename : defaultFilename;
+
+      exportSalesToCSV(targetSales, filename, {
+        ...options,
+        settings: {
+          storeName: settings.storeName,
+          storeCode: settings.storeCode,
+          campaignName: settings.campaignName,
+          month: settings.month,
+          year: settings.year,
+        },
+      });
+      showToast(`Exportados ${targetSales.length} registros a CSV (${filename})`, 'success');
+    },
+    [sales, settings, showToast]
+  );
 
   const clearDemoData = useCallback(async () => {
     if (!checkAdminPermission('eliminar datos de demostración')) return;
@@ -492,6 +638,9 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         loading,
         toast,
         hasDemoData,
+        activeMilestone,
+        triggerMilestoneToast,
+        dismissToast,
         isAdmin,
         adminUser,
         loginAdmin,

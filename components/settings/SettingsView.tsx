@@ -15,12 +15,16 @@ import {
   FileSpreadsheet,
   Plus,
   AlertTriangle,
-  Check,
-  ShieldAlert,
   ShieldCheck,
   Lock,
+  BellRing,
+  BellOff,
+  Award,
+  Trophy,
+  Flame,
 } from 'lucide-react';
-import { CategoryId, Product, CampaignSettings } from '@/types';
+import { CategoryId, CampaignSettings, MilestoneLevel, MilestoneNotificationsConfig } from '@/types';
+import { DEFAULT_MILESTONE_NOTIFICATIONS } from '@/lib/storage';
 import { useSalesTracker } from '@/context/SalesTrackerContext';
 
 const WEEKDAYS = [
@@ -31,6 +35,40 @@ const WEEKDAYS = [
   { id: 5, label: 'Viernes' },
   { id: 6, label: 'Sábado' },
   { id: 0, label: 'Domingo' },
+];
+
+const MILESTONE_LEVELS_META: {
+  level: MilestoneLevel;
+  title: string;
+  subtitle: string;
+  badgeClass: string;
+  accentBorderClass: string;
+  Icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  {
+    level: 80,
+    title: 'Hito del 80% del Objetivo',
+    subtitle: 'Umbral mínimo de devengo de incentivos',
+    badgeClass: 'bg-blue-100 text-blue-800 border-blue-200',
+    accentBorderClass: 'border-blue-200 bg-blue-50/30',
+    Icon: Award,
+  },
+  {
+    level: 100,
+    title: 'Hito del 100% del Objetivo',
+    subtitle: 'Meta mensual de unidades cumplida',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    accentBorderClass: 'border-emerald-200 bg-emerald-50/30',
+    Icon: Trophy,
+  },
+  {
+    level: 120,
+    title: 'Hito del 120% del Objetivo',
+    subtitle: 'Tramo de sobrecumplimiento y bonificación acelerada',
+    badgeClass: 'bg-amber-100 text-amber-900 border-amber-200',
+    accentBorderClass: 'border-amber-200 bg-amber-50/30',
+    Icon: Flame,
+  },
 ];
 
 export function SettingsView() {
@@ -54,7 +92,7 @@ export function SettingsView() {
 
   // Estado local para el formulario de configuración
   const [formData, setFormData] = useState<CampaignSettings>(settings);
-  const [activeTab, setActiveTab] = useState<'general' | 'gamas' | 'bonus' | 'backup'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'gamas' | 'hitos' | 'bonus' | 'backup'>('general');
 
   // Estado para nuevo producto
   const [newProductName, setNewProductName] = useState('');
@@ -74,6 +112,68 @@ export function SettingsView() {
     setFormData(settings);
   }
 
+  const currentMilestoneNotifications: MilestoneNotificationsConfig = {
+    80: {
+      ...DEFAULT_MILESTONE_NOTIFICATIONS[80],
+      ...(formData.milestoneNotifications?.[80] || {}),
+    },
+    100: {
+      ...DEFAULT_MILESTONE_NOTIFICATIONS[100],
+      ...(formData.milestoneNotifications?.[100] || {}),
+    },
+    120: {
+      ...DEFAULT_MILESTONE_NOTIFICATIONS[120],
+      ...(formData.milestoneNotifications?.[120] || {}),
+    },
+  };
+
+  const handleToggleMilestoneAlert = (level: MilestoneLevel, enabled: boolean) => {
+    setFormData({
+      ...formData,
+      milestoneNotifications: {
+        ...currentMilestoneNotifications,
+        [level]: {
+          ...currentMilestoneNotifications[level],
+          enabled,
+        },
+      },
+    });
+  };
+
+  const handleChangeMilestoneMessage = (level: MilestoneLevel, customMessage: string) => {
+    setFormData({
+      ...formData,
+      milestoneNotifications: {
+        ...currentMilestoneNotifications,
+        [level]: {
+          ...currentMilestoneNotifications[level],
+          customMessage,
+        },
+      },
+    });
+  };
+
+  const handleRestoreDefaultMilestoneMessages = () => {
+    setFormData({
+      ...formData,
+      milestoneNotifications: {
+        80: {
+          enabled: currentMilestoneNotifications[80].enabled,
+          customMessage: DEFAULT_MILESTONE_NOTIFICATIONS[80].customMessage,
+        },
+        100: {
+          enabled: currentMilestoneNotifications[100].enabled,
+          customMessage: DEFAULT_MILESTONE_NOTIFICATIONS[100].customMessage,
+        },
+        120: {
+          enabled: currentMilestoneNotifications[120].enabled,
+          customMessage: DEFAULT_MILESTONE_NOTIFICATIONS[120].customMessage,
+        },
+      },
+    });
+    showToast('Mensajes de hitos restaurados a los valores predeterminados', 'info');
+  };
+
   // Manejar guardado de configuración general
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +181,31 @@ export function SettingsView() {
       showToast('Los objetivos no pueden ser negativos', 'error');
       return;
     }
-    await updateSettings(formData);
+    const normalizedSettings: CampaignSettings = {
+      ...formData,
+      milestoneNotifications: {
+        80: {
+          enabled: currentMilestoneNotifications[80].enabled,
+          customMessage:
+            currentMilestoneNotifications[80].customMessage.trim() ||
+            DEFAULT_MILESTONE_NOTIFICATIONS[80].customMessage,
+        },
+        100: {
+          enabled: currentMilestoneNotifications[100].enabled,
+          customMessage:
+            currentMilestoneNotifications[100].customMessage.trim() ||
+            DEFAULT_MILESTONE_NOTIFICATIONS[100].customMessage,
+        },
+        120: {
+          enabled: currentMilestoneNotifications[120].enabled,
+          customMessage:
+            currentMilestoneNotifications[120].customMessage.trim() ||
+            DEFAULT_MILESTONE_NOTIFICATIONS[120].customMessage,
+        },
+      },
+    };
+    setFormData(normalizedSettings);
+    await updateSettings(normalizedSettings);
   };
 
   // Toggle de días laborables por defecto
@@ -132,6 +256,165 @@ export function SettingsView() {
     e.target.value = '';
   };
 
+  // Subsección reutilizable: Notificaciones de Hitos (80%, 100%, 120%)
+  const renderMilestoneNotificationsSection = () => (
+    <div
+      id="settings-milestone-notifications-section"
+      className="bg-white rounded-2xl p-5 md:p-6 border border-slate-200/80 shadow-xs space-y-5"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <BellRing className="w-4 h-4 text-blue-600" />
+            <span>Notificaciones de Hitos</span>
+          </h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Habilita o deshabilita las alertas visuales para el 80%, 100% y 120% del objetivo mensual y personaliza el mensaje de éxito de cada nivel.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleRestoreDefaultMilestoneMessages}
+          id="reset-milestone-messages-btn"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200/80 rounded-xl transition-colors self-start sm:self-auto shrink-0 cursor-pointer"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Restaurar mensajes por defecto</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {MILESTONE_LEVELS_META.map(({ level, title, subtitle, badgeClass, accentBorderClass, Icon }) => {
+          const levelConfig = currentMilestoneNotifications[level];
+          const isEnabled = levelConfig.enabled;
+
+          return (
+            <div
+              key={level}
+              id={`milestone-config-card-${level}`}
+              className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-4 text-xs ${
+                isEnabled
+                  ? accentBorderClass
+                  : 'border-slate-200 bg-slate-50/70 opacity-85'
+              }`}
+            >
+              <div className="space-y-3">
+                {/* Cabecera del nivel y switch de activación */}
+                <div className="flex items-start justify-between gap-2 border-b border-slate-200/60 pb-3">
+                  <div className="flex items-start gap-2.5">
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                        isEnabled ? badgeClass : 'bg-slate-200/70 text-slate-500 border-slate-300'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-extrabold text-slate-900 text-xs">{title}</span>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                            isEnabled
+                              ? badgeClass
+                              : 'bg-slate-200 text-slate-600 border-slate-300'
+                          }`}
+                        >
+                          {level}%
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-0.5">{subtitle}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Control de habilitar / deshabilitar alerta visual */}
+                <div className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-200/80">
+                  <div className="flex items-center gap-2">
+                    {isEnabled ? (
+                      <BellRing className="w-4 h-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <BellOff className="w-4 h-4 text-slate-400 shrink-0" />
+                    )}
+                    <div>
+                      <label
+                        htmlFor={`milestone-toggle-${level}`}
+                        className="font-bold text-slate-800 block cursor-pointer"
+                      >
+                        Alerta visual del {level}%
+                      </label>
+                      <span className="text-[10px] text-slate-500">
+                        {isEnabled ? 'Notificación activa en Dashboard' : 'Notificación desactivada'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      id={`milestone-toggle-${level}`}
+                      checked={isEnabled}
+                      onChange={(e) => handleToggleMilestoneAlert(level, e.target.checked)}
+                      aria-label={`Habilitar alerta visual para el ${level}% del objetivo`}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5.5 bg-slate-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4.5 after:w-4.5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* Campo de mensaje de éxito personalizado */}
+                <div>
+                  <label
+                    htmlFor={`milestone-message-${level}`}
+                    className="block font-semibold text-slate-700 mb-1.5"
+                  >
+                    Mensaje de éxito para el {level}%
+                  </label>
+                  <textarea
+                    id={`milestone-message-${level}`}
+                    rows={3}
+                    value={levelConfig.customMessage}
+                    onChange={(e) => handleChangeMilestoneMessage(level, e.target.value)}
+                    placeholder={DEFAULT_MILESTONE_NOTIFICATIONS[level].customMessage}
+                    aria-label={`Mensaje de éxito para el ${level}%`}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-900 text-xs leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* Pie de tarjeta: Vista previa rápida */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-200/60">
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                    isEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                  }`}
+                >
+                  {isEnabled ? 'Habilitado' : 'Deshabilitado'}
+                </span>
+
+                <button
+                  type="button"
+                  id={`milestone-preview-btn-${level}`}
+                  onClick={() =>
+                    showToast(
+                      levelConfig.customMessage.trim() ||
+                        DEFAULT_MILESTONE_NOTIFICATIONS[level].customMessage,
+                      'milestone'
+                    )
+                  }
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                >
+                  <BellRing className="w-3 h-3" />
+                  <span>Probar alerta</span>
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Cabecera */}
@@ -142,7 +425,7 @@ export function SettingsView() {
             <span>Configuración del Sistema</span>
           </h1>
           <p className="text-xs text-slate-600 mt-0.5">
-            Personaliza objetivos, incentivos, calendario y catálogo de modelos
+            Personaliza objetivos, incentivos, notificaciones de hitos, calendario y catálogo de modelos
           </p>
         </div>
 
@@ -197,7 +480,9 @@ export function SettingsView() {
       {/* Tabs de Configuración */}
       <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200">
         <button
+          type="button"
           onClick={() => setActiveTab('general')}
+          id="settings-tab-general"
           className={`px-4 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors ${
             activeTab === 'general'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -207,7 +492,9 @@ export function SettingsView() {
           General y Calendario
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('gamas')}
+          id="settings-tab-gamas"
           className={`px-4 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors ${
             activeTab === 'gamas'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -217,7 +504,22 @@ export function SettingsView() {
           Objetivos de Gamas
         </button>
         <button
+          type="button"
+          onClick={() => setActiveTab('hitos')}
+          id="settings-tab-milestones"
+          className={`px-4 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+            activeTab === 'hitos'
+              ? 'bg-blue-600 text-white shadow-xs'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <BellRing className="w-3.5 h-3.5" />
+          <span>Notificaciones de Hitos</span>
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('bonus')}
+          id="settings-tab-bonus"
           className={`px-4 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors ${
             activeTab === 'bonus'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -227,7 +529,9 @@ export function SettingsView() {
           Bonus y Modelos
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('backup')}
+          id="settings-tab-backup"
           className={`px-4 py-2 text-xs font-semibold rounded-xl whitespace-nowrap transition-colors ${
             activeTab === 'backup'
               ? 'bg-blue-600 text-white shadow-xs'
@@ -351,8 +655,12 @@ export function SettingsView() {
             </div>
           </div>
 
+          {/* Subsección Notificaciones de Hitos */}
+          {renderMilestoneNotificationsSection()}
+
           <button
             type="submit"
+            id="save-general-settings-btn"
             className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
           >
             <Save className="w-4 h-4" />
@@ -475,12 +783,32 @@ export function SettingsView() {
             </div>
           </div>
 
+          {/* Subsección Notificaciones de Hitos */}
+          {renderMilestoneNotificationsSection()}
+
           <button
             type="submit"
+            id="save-gamas-settings-btn"
             className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
           >
             <Save className="w-4 h-4" />
-            <span>Guardar Objetivos de Gama</span>
+            <span>Guardar Objetivos y Notificaciones</span>
+          </button>
+        </form>
+      )}
+
+      {/* TAB 2.5: NOTIFICACIONES DE HITOS */}
+      {activeTab === 'hitos' && (
+        <form onSubmit={handleSaveSettings} className="space-y-6">
+          {renderMilestoneNotificationsSection()}
+
+          <button
+            type="submit"
+            id="save-milestone-settings-btn"
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors"
+          >
+            <Save className="w-4 h-4" />
+            <span>Guardar Notificaciones de Hitos</span>
           </button>
         </form>
       )}

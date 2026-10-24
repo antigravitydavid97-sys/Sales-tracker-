@@ -1,6 +1,7 @@
 import {
   AppDataPayload,
   CampaignSettings,
+  MilestoneNotificationsConfig,
   Product,
   Sale,
 } from '@/types';
@@ -10,6 +11,21 @@ export const STORAGE_KEYS = {
   SALES: 'team_sales_tracker_sales_v1',
   PRODUCTS: 'team_sales_tracker_products_v1',
   VERSION: 'team_sales_tracker_version_v1',
+};
+
+export const DEFAULT_MILESTONE_NOTIFICATIONS: MilestoneNotificationsConfig = {
+  80: {
+    enabled: true,
+    customMessage: '¡Hito del 80% alcanzado! Has desbloqueado el umbral mínimo de incentivos mensuales.',
+  },
+  100: {
+    enabled: true,
+    customMessage: '¡Objetivo mensual del 100% cumplido! Has alcanzado la meta de unidades de la tienda.',
+  },
+  120: {
+    enabled: true,
+    customMessage: '¡Hito del 120% alcanzado! Estás en tramo de sobrecumplimiento con bonificación acelerada.',
+  },
 };
 
 export const DEFAULT_PRODUCTS: Product[] = [
@@ -104,6 +120,11 @@ export function getDefaultSettings(): CampaignSettings {
         type: 'penalty',
       },
     ],
+    milestoneNotifications: {
+      80: { ...DEFAULT_MILESTONE_NOTIFICATIONS[80] },
+      100: { ...DEFAULT_MILESTONE_NOTIFICATIONS[100] },
+      120: { ...DEFAULT_MILESTONE_NOTIFICATIONS[120] },
+    },
   };
 }
 
@@ -223,6 +244,20 @@ export class LocalStorageRepository implements DataRepository {
         workDaysConfig: {
           defaultWorkDays: parsed.workDaysConfig?.defaultWorkDays || defaults.workDaysConfig.defaultWorkDays,
           customDayOverrides: parsed.workDaysConfig?.customDayOverrides || {},
+        },
+        milestoneNotifications: {
+          80: {
+            ...defaults.milestoneNotifications[80],
+            ...(parsed.milestoneNotifications?.[80] || {}),
+          },
+          100: {
+            ...defaults.milestoneNotifications[100],
+            ...(parsed.milestoneNotifications?.[100] || {}),
+          },
+          120: {
+            ...defaults.milestoneNotifications[120],
+            ...(parsed.milestoneNotifications?.[120] || {}),
+          },
         },
       };
     } catch (e) {

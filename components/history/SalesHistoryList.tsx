@@ -19,12 +19,26 @@ import {
   Lock,
   ShieldCheck,
   Loader2,
+  Download,
+  SlidersHorizontal,
+  Copy,
 } from 'lucide-react';
 import { CategoryId, Sale } from '@/types';
 import { useSalesTracker } from '@/context/SalesTrackerContext';
+import { generateSalesCSVContent } from '@/lib/csv';
 
 export function SalesHistoryList() {
-  const { sales, products, deleteSale, updateSale, exportSalesCSV, isAdmin, openLoginModal } = useSalesTracker();
+  const {
+    sales,
+    products,
+    settings,
+    deleteSale,
+    updateSale,
+    exportSalesCSV,
+    showToast,
+    isAdmin,
+    openLoginModal,
+  } = useSalesTracker();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
@@ -42,6 +56,13 @@ export function SalesHistoryList() {
   const [deletingSaleId, setDeletingSaleId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
+  // Estados para exportación estructurada a CSV
+  const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
+  const [exportScope, setExportScope] = useState<'filtered' | 'all'>('filtered');
+  const [exportDelimiter, setExportDelimiter] = useState<',' | ';'>(',');
+  const [exportIncludeSummary, setExportIncludeSummary] = useState<boolean>(true);
+  const [copiedCSV, setCopiedCSV] = useState<boolean>(false);
+
   // Registro seleccionado para eliminar
   const saleToDelete = useMemo(() => {
     if (!deletingSaleId) return null;
@@ -56,12 +77,14 @@ export function SalesHistoryList() {
           setDeletingSaleId(null);
         } else if (editingSale) {
           setEditingSale(null);
+        } else if (isExportModalOpen) {
+          setIsExportModalOpen(false);
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [deletingSaleId, editingSale, isDeleting]);
+  }, [deletingSaleId, editingSale, isDeleting, isExportModalOpen]);
 
   // Filtrado reactivo
   const filteredSales = useMemo(() => {
@@ -160,6 +183,63 @@ export function SalesHistoryList() {
   const hasActiveFilters =
     Boolean(searchQuery) || selectedCategory !== 'ALL' || selectedProductId !== 'ALL' || Boolean(selectedDate);
 
+  // Ventas objetivo según el alcance seleccionado en el modal de exportación
+  const salesForModalExport = useMemo(() => {
+    return exportScope === 'filtered' ? filteredSales : sales;
+  }, [exportScope, filteredSales, sales]);
+
+  const monthPadded = String(settings.month).padStart(2, '0');
+  const computedExportFilename = useMemo(() => {
+    const baseStore = (settings.storeCode || 'team').toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    const suffix = exportScope === 'filtered' && hasActiveFilters ? '-filtrado' : '';
+    return `ventas-${baseStore}-${settings.year}-${monthPadded}${suffix}.csv`;
+  }, [settings.storeCode, settings.year, monthPadded, exportScope, hasActiveFilters]);
+
+  // Exportación rápida en 1 clic (exporta la vista actual filtrada o todas las ventas)
+  const handleQuickExportCSV = () => {
+    const targetList = filteredSales;
+    const baseStore = (settings.storeCode || 'team').toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+    const suffix = hasActiveFilters ? '-filtrado' : '';
+    const filename = `ventas-${baseStore}-${settings.year}-${monthPadded}${suffix}.csv`;
+
+    exportSalesCSV(targetList, filename, {
+      delimiter: ',',
+      includeSummary: true,
+    });
+  };
+
+  // Exportación desde el modal con opciones personalizadas
+  const handleConfirmModalExport = () => {
+    exportSalesCSV(salesForModalExport, computedExportFilename, {
+      delimiter: exportDelimiter,
+      includeSummary: exportIncludeSummary,
+    });
+    setIsExportModalOpen(false);
+  };
+
+  const handleCopyCSVToClipboard = async () => {
+    if (salesForModalExport.length === 0) return;
+    try {
+      const content = generateSalesCSVContent(salesForModalExport, {
+        delimiter: exportDelimiter,
+        includeSummary: exportIncludeSummary,
+        settings: {
+          storeName: settings.storeName,
+          storeCode: settings.storeCode,
+          campaignName: settings.campaignName,
+          month: settings.month,
+          year: settings.year,
+        },
+      });
+      await navigator.clipboard.writeText(content);
+      setCopiedCSV(true);
+      showToast('Datos CSV copiados al portapapeles', 'success');
+      setTimeout(() => setCopiedCSV(false), 2500);
+    } catch {
+      showToast('No se pudo copiar al portapapeles', 'error');
+    }
+  };
+
   return (
     <div className="space-y-5">
       {/* Cabecera y botón de acción */}
@@ -174,15 +254,37 @@ export function SalesHistoryList() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={exportSalesCSV}
-            id="history-export-csv-btn"
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-            <span>Exportar CSV</span>
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center rounded-xl border border-emerald-200 bg-emerald-50/70 shadow-2xs overflow-hidden">
+            <button
+              type="button"
+              onClick={handleQuickExportCSV}
+              disabled={filteredSales.length === 0}
+              id="history-export-csv-btn"
+              title="Descargar archivo CSV con los registros mostrados"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100/80 transition-colors disabled:opacity-45 disabled:pointer-events-none cursor-pointer"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Exportar a CSV</span>
+              <span className="ml-0.5 px-1.5 py-0.2 bg-white/90 text-emerald-700 border border-emerald-200 rounded-md text-[10px] font-bold">
+                {filteredSales.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setExportScope(hasActiveFilters ? 'filtered' : 'all');
+                setIsExportModalOpen(true);
+              }}
+              disabled={sales.length === 0}
+              id="history-export-options-btn"
+              title="Configurar formato de exportación CSV"
+              aria-label="Opciones de exportación CSV"
+              className="px-2.5 py-2 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-100 border-l border-emerald-200 transition-colors disabled:opacity-45 disabled:pointer-events-none cursor-pointer"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
           <Link
             href="/ventas"
@@ -301,10 +403,24 @@ export function SalesHistoryList() {
         </div>
 
         {/* Resumen de resultados filtrados */}
-        <div className="flex items-center justify-between text-xs text-slate-600 pt-2 border-t border-slate-100">
-          <span>
-            Mostrando <strong>{filteredSales.length}</strong> {filteredSales.length === 1 ? 'registro' : 'registros'}
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 pt-2 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <span>
+              Mostrando <strong>{filteredSales.length}</strong> {filteredSales.length === 1 ? 'registro' : 'registros'}
+              {hasActiveFilters && ` (filtrado de ${sales.length})`}
+            </span>
+            {filteredSales.length > 0 && (
+              <button
+                type="button"
+                onClick={handleQuickExportCSV}
+                id="history-summary-export-csv-btn"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200/70 transition-colors cursor-pointer"
+              >
+                <Download className="w-3 h-3" />
+                <span>Descargar CSV</span>
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <span>Total uds: <strong className="text-slate-900">{totalFilteredUnits}</strong></span>
             <span>•</span>
@@ -751,6 +867,227 @@ export function SalesHistoryList() {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Exportación Estructurada a CSV */}
+      {isExportModalOpen && (
+        <div
+          id="csv-export-modal"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={() => setIsExportModalOpen(false)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50/60">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center shrink-0">
+                  <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base leading-tight">
+                    Exportar Ventas a CSV
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Descarga tus registros estructurados para Excel o Google Sheets
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsExportModalOpen(false)}
+                id="close-csv-export-modal-btn"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                aria-label="Cerrar modal de exportación"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* Selección de alcance (Filtrados vs Todos) */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Registros a incluir en el archivo
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('filtered')}
+                    id="export-scope-filtered-btn"
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      exportScope === 'filtered'
+                        ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">Vista actual</span>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                        {filteredSales.length} reg.
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {hasActiveFilters
+                        ? 'Solo las ventas que coinciden con tus filtros activos'
+                        : 'Todos los registros mostrados actualmente'}
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportScope('all')}
+                    id="export-scope-all-btn"
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                      exportScope === 'all'
+                        ? 'border-emerald-600 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">Historial completo</span>
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold">
+                        {sales.length} reg.
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Todas las ventas almacenadas sin aplicar filtros
+                    </p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Delimitador de columnas */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Separador de columnas
+                </label>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setExportDelimiter(',')}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
+                      exportDelimiter === ','
+                        ? 'border-blue-600 bg-blue-50/70 text-blue-900'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block font-bold">Coma ( , )</span>
+                    <span className="text-[10px] text-slate-500">Estándar CSV / Google Sheets</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportDelimiter(';')}
+                    className={`py-2.5 px-3 rounded-xl border text-xs font-semibold text-left transition-all cursor-pointer ${
+                      exportDelimiter === ';'
+                        ? 'border-blue-600 bg-blue-50/70 text-blue-900'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="block font-bold">Punto y coma ( ; )</span>
+                    <span className="text-[10px] text-slate-500">Microsoft Excel (España/UE)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Opción de incluir fila de totales */}
+              <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200/80 cursor-pointer">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">
+                    Incluir fila de resumen y totales
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Añade al final del archivo la suma de unidades por gama y bonus total (€)
+                  </span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={exportIncludeSummary}
+                  onChange={(e) => setExportIncludeSummary(e.target.checked)}
+                  className="w-4 h-4 accent-emerald-600 rounded cursor-pointer"
+                />
+              </label>
+
+              {/* Resumen previo de estructura y archivo */}
+              <div className="p-3.5 rounded-2xl bg-slate-900 text-slate-100 space-y-2 text-xs">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-slate-400 text-[11px]">Archivo de salida:</span>
+                  <code className="text-emerald-400 font-mono text-[11px] font-semibold">
+                    {computedExportFilename}
+                  </code>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                  <div className="bg-slate-800/90 rounded-lg p-2">
+                    <span className="text-[10px] text-slate-400 block">Registros</span>
+                    <span className="font-bold text-sm text-white">{salesForModalExport.length}</span>
+                  </div>
+                  <div className="bg-slate-800/90 rounded-lg p-2">
+                    <span className="text-[10px] text-slate-400 block">Unidades Netas</span>
+                    <span className="font-bold text-sm text-white">
+                      {salesForModalExport.reduce((acc, s) => acc + s.quantity, 0)} uds
+                    </span>
+                  </div>
+                  <div className="bg-slate-800/90 rounded-lg p-2">
+                    <span className="text-[10px] text-slate-400 block">Bonus Total</span>
+                    <span className="font-bold text-sm text-emerald-400">
+                      +{salesForModalExport.reduce((acc, s) => acc + s.totalBonus, 0).toFixed(2)} €
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 pt-1">
+                  Columnas: ID, Fecha, Tienda, Campaña, Producto, Gama, Cantidad, Bonus Unitario (€), Total Bonus (€), Tipo, Notas
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-t border-slate-100 bg-slate-50/50">
+              <button
+                type="button"
+                onClick={handleCopyCSVToClipboard}
+                disabled={salesForModalExport.length === 0}
+                id="copy-csv-clipboard-btn"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors disabled:opacity-40 cursor-pointer"
+              >
+                {copiedCSV ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    <span className="text-emerald-700">Copiado</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Copiar texto CSV</span>
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsExportModalOpen(false)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmModalExport}
+                  disabled={salesForModalExport.length === 0}
+                  id="confirm-export-csv-btn"
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-all disabled:opacity-40 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Descargar CSV ({salesForModalExport.length})</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

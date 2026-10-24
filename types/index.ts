@@ -52,6 +52,15 @@ export interface CampaignRule {
   type: 'info' | 'warning' | 'penalty';
 }
 
+export type MilestoneLevel = 80 | 100 | 120;
+
+export interface MilestoneNotificationLevelConfig {
+  enabled: boolean;
+  customMessage: string;
+}
+
+export type MilestoneNotificationsConfig = Record<MilestoneLevel, MilestoneNotificationLevelConfig>;
+
 export interface CampaignSettings {
   zone: string;               // Zona / Territorio
   storeName: string;          // Nombre tienda
@@ -70,6 +79,7 @@ export interface CampaignSettings {
   };
 
   rules: CampaignRule[];
+  milestoneNotifications: MilestoneNotificationsConfig;
 }
 
 export interface CategoryIncentiveResult {

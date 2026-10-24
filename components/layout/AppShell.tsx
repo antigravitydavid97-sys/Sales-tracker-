@@ -44,6 +44,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     settings,
     stats,
     toast,
+    dismissToast,
     hasDemoData,
     clearDemoData,
     exportDataJSON,
@@ -356,7 +357,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <AdminLoginModal />
 
       {/* Persistent Toast Feedback */}
-      <Toast toast={toast} />
+      <Toast toast={toast} onClose={dismissToast} />
     </div>
   );
 }

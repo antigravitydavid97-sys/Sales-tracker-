@@ -74,24 +74,57 @@ export function MetricCards() {
             Conseguido %
           </span>
           <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-            isAhead ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
+            stats.overallProgress >= 120
+              ? 'bg-amber-50 text-amber-600'
+              : isAhead
+              ? 'bg-emerald-50 text-emerald-600'
+              : 'bg-blue-50 text-blue-600'
           }`}>
             <Percent className="w-4 h-4" />
           </div>
         </div>
         <div>
-          <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline justify-between gap-1">
             <span className={`text-2xl md:text-3xl font-extrabold tracking-tight ${
-              isAhead ? 'text-emerald-600' : stats.overallProgress >= 80 ? 'text-blue-600' : 'text-slate-900'
+              stats.overallProgress >= 120
+                ? 'text-amber-600'
+                : isAhead
+                ? 'text-emerald-600'
+                : stats.overallProgress >= 80
+                ? 'text-blue-600'
+                : 'text-slate-900'
             }`}>
               {stats.overallProgress}%
             </span>
+            {stats.overallProgress >= 80 && (
+              <span
+                className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md border ${
+                  stats.overallProgress >= 120
+                    ? 'bg-amber-50 text-amber-800 border-amber-200'
+                    : stats.overallProgress >= 100
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : 'bg-blue-50 text-blue-800 border-blue-200'
+                }`}
+              >
+                {stats.overallProgress >= 120
+                  ? 'Hito 120%+'
+                  : stats.overallProgress >= 100
+                  ? 'Hito 100%'
+                  : 'Hito 80%'}
+              </span>
+            )}
           </div>
           {/* Barra de progreso */}
           <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                isAhead ? 'bg-emerald-500' : stats.overallProgress >= 80 ? 'bg-blue-600' : 'bg-amber-500'
+                stats.overallProgress >= 120
+                  ? 'bg-amber-500'
+                  : isAhead
+                  ? 'bg-emerald-500'
+                  : stats.overallProgress >= 80
+                  ? 'bg-blue-600'
+                  : 'bg-amber-500'
               }`}
               style={{ width: `${Math.min(100, stats.overallProgress)}%` }}
             />

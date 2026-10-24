@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { HeaderSummary } from '@/components/dashboard/HeaderSummary';
+import { MilestoneNotification } from '@/components/dashboard/MilestoneNotification';
 import { MetricCards } from '@/components/dashboard/MetricCards';
 import { PaceControl } from '@/components/dashboard/PaceControl';
 import { CategoryCards } from '@/components/dashboard/CategoryCards';
@@ -14,6 +15,9 @@ export default function DashboardPage() {
     <div id="dashboard-page-container" className="space-y-6">
       {/* 1. Cabecera con datos de tienda y acciones */}
       <HeaderSummary />
+
+      {/* 1.5 Notificación visual de hitos mensuales (80%, 100%, 120%) */}
+      <MilestoneNotification />
 
       {/* 2. Resumen General: Las 4 tarjetas clave de ventas */}
       <MetricCards />
