@@ -102,12 +102,13 @@ export function CategoryCards({ onQuickAdd }: CategoryCardsProps) {
                     </span>
                   </div>
 
-                  {/* Botones rápidos "-1" y "+1" para móvil/escritorio */}
+                  {/* Botones rápidos "-1" y "+HIGH / +MID / +ENTRY" para móvil/escritorio */}
                   <div className="flex items-center gap-1 bg-slate-100/90 p-0.5 rounded-lg border border-slate-200/70">
                     <button
+                      type="button"
                       onClick={() => handleQuickSubtract(catId)}
                       id={`quick-subtract-${catId.toLowerCase()}-btn`}
-                      className="flex items-center justify-center w-7 h-7 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-md text-xs font-bold transition-all active:scale-95"
+                      className="flex items-center justify-center w-7 h-7 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-md text-xs font-bold transition-all active:scale-95 cursor-pointer"
                       title={`Restar 1 venta a ${catId}`}
                       aria-label={`Restar venta rápida a gama ${catId}`}
                     >
@@ -115,13 +116,19 @@ export function CategoryCards({ onQuickAdd }: CategoryCardsProps) {
                     </button>
                     <div className="w-[1px] h-3.5 bg-slate-300" />
                     <button
+                      type="button"
                       onClick={() => handleQuickAdd(catId)}
                       id={`quick-add-${catId.toLowerCase()}-btn`}
-                      className="flex items-center justify-center w-7 h-7 hover:bg-blue-100 hover:text-blue-700 text-slate-700 rounded-md text-xs font-bold transition-all active:scale-95"
+                      className={`flex items-center justify-center px-2.5 h-7 rounded-md text-xs font-extrabold text-white transition-all active:scale-95 cursor-pointer ${
+                        catId === 'HIGH'
+                          ? 'bg-blue-600 hover:bg-blue-700'
+                          : catId === 'MID'
+                          ? 'bg-emerald-600 hover:bg-emerald-700'
+                          : 'bg-purple-600 hover:bg-purple-700'
+                      }`}
                       title={`Añadir 1 venta a ${catId}`}
-                      aria-label={`Añadir venta rápida a gama ${catId}`}
                     >
-                      <Plus className="w-3.5 h-3.5" />
+                      +{catId}
                     </button>
                   </div>
                 </div>

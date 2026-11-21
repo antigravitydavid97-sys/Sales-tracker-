@@ -3,6 +3,7 @@ import {
   CampaignSettings,
   CategoryIncentiveResult,
   DashboardStats,
+  DeviceType,
   IncentiveTier,
   Product,
   Sale,
@@ -331,3 +332,124 @@ export function calculateDashboardStats(
     totalEstimatedEarnings,
   };
 }
+
+/**
+ * Resuelve el tipo de dispositivo ('MOBILE' | 'TABLET') a partir de un producto o su nombre.
+ */
+export function resolveProductDeviceType(productName: string, explicitType?: DeviceType): DeviceType {
+  if (explicitType === 'MOBILE' || explicitType === 'TABLET') {
+    return explicitType;
+  }
+  if (/(pad|tablet|ipad|tab\b)/i.test(productName || '')) {
+    return 'TABLET';
+  }
+  return 'MOBILE';
+}
+
+/**
+ * Resuelve si una venta corresponde a Móvil o Tablet.
+ */
+export function resolveSaleDeviceType(sale: Sale, products: Product[]): DeviceType {
+  if (sale.deviceType === 'MOBILE' || sale.deviceType === 'TABLET') {
+    return sale.deviceType;
+  }
+  const matchedProduct =
+    products.find((p) => p.id === sale.productId) ||
+    products.find((p) => p.name.trim().toLowerCase() === (sale.productName || '').trim().toLowerCase());
+
+  if (matchedProduct) {
+    return resolveProductDeviceType(matchedProduct.name, matchedProduct.deviceType);
+  }
+  return resolveProductDeviceType(sale.productName || '');
+}
+
+export interface WeeklyDeviceSalesStat {
+  weekNumber: number;
+  weekLabel: string;
+  dateRangeLabel: string;
+  axisLabel: string;
+  startDay: number;
+  endDay: number;
+  moviles: number;
+  tablets: number;
+  global: number;
+}
+
+export interface WeeklyDeviceBreakdown {
+  weeks: WeeklyDeviceSalesStat[];
+  totalMoviles: number;
+  totalTablets: number;
+  totalGlobal: number;
+}
+
+/**
+ * Agrupa todas las semanas del mes en curso (Lunes a Domingo) diferenciando
+ * unidades vendidas de Móviles, Tablets y el Global semanal.
+ */
+export function calculateWeeklyDeviceStats(
+  sales: Sale[],
+  products: Product[],
+  year: number,
+  month: number // 1-12
+): WeeklyDeviceBreakdown {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const firstDayRaw = new Date(year, month - 1, 1).getDay(); // 0 = Sun, 1 = Mon ...
+  const firstDayOffset = firstDayRaw === 0 ? 6 : firstDayRaw - 1; // Lunes = 0 .. Domingo = 6
+  const totalWeeks = Math.ceil((daysInMonth + firstDayOffset) / 7);
+
+  const weeks: WeeklyDeviceSalesStat[] = Array.from({ length: totalWeeks }, (_, idx) => {
+    const startDay = Math.max(1, idx * 7 - firstDayOffset + 1);
+    const endDay = Math.min(daysInMonth, (idx + 1) * 7 - firstDayOffset);
+    const weekNumber = idx + 1;
+    const rangeShort = startDay === endDay ? `${startDay}` : `${startDay}-${endDay}`;
+    const dateRangeLabel = startDay === endDay ? `Día ${startDay}` : `Días ${startDay} al ${endDay}`;
+
+    return {
+      weekNumber,
+      weekLabel: `Semana ${weekNumber}`,
+      dateRangeLabel,
+      axisLabel: `Sem ${weekNumber} (${rangeShort})`,
+      startDay,
+      endDay,
+      moviles: 0,
+      tablets: 0,
+      global: 0,
+    };
+  });
+
+  const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
+  let totalMoviles = 0;
+  let totalTablets = 0;
+  let totalGlobal = 0;
+
+  for (const sale of sales) {
+    if (!sale.date || !sale.date.startsWith(monthPrefix)) continue;
+    const dayNum = parseInt(sale.date.split('-')[2], 10);
+    if (isNaN(dayNum) || dayNum < 1 || dayNum > daysInMonth) continue;
+
+    const weekIndex = Math.floor((dayNum - 1 + firstDayOffset) / 7);
+    const bucket = weeks[weekIndex];
+    if (!bucket) continue;
+
+    const qty = Number(sale.quantity) || 0;
+    const deviceType = resolveSaleDeviceType(sale, products);
+
+    if (deviceType === 'TABLET') {
+      bucket.tablets += qty;
+      totalTablets += qty;
+    } else {
+      bucket.moviles += qty;
+      totalMoviles += qty;
+    }
+    bucket.global += qty;
+    totalGlobal += qty;
+  }
+
+  return {
+    weeks,
+    totalMoviles,
+    totalTablets,
+    totalGlobal,
+  };
+}
+

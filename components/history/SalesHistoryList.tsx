@@ -155,15 +155,16 @@ export function SalesHistoryList() {
 
   // Manejadores de eliminación
   const requestDelete = (saleId: string) => {
-    if (!isAdmin) {
-      openLoginModal('eliminar ventas del historial');
-      return;
-    }
     setDeletingSaleId(saleId);
   };
 
   const confirmDelete = async () => {
     if (!deletingSaleId || isDeleting) return;
+    if (!isAdmin) {
+      setDeletingSaleId(null);
+      openLoginModal('eliminar ventas del historial');
+      return;
+    }
     try {
       setIsDeleting(true);
       await deleteSale(deletingSaleId);
@@ -727,6 +728,10 @@ export function SalesHistoryList() {
       {deletingSaleId && saleToDelete && (
         <div
           id="delete-confirm-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-confirm-modal-title"
+          aria-describedby="delete-confirm-modal-description"
           className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-150"
           onClick={() => !isDeleting && setDeletingSaleId(null)}
         >
@@ -742,11 +747,14 @@ export function SalesHistoryList() {
                   <AlertTriangle className="w-5 h-5 text-rose-600" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-900 text-base leading-tight">
-                    ¿Eliminar registro de venta?
+                  <h3
+                    id="delete-confirm-modal-title"
+                    className="font-bold text-slate-900 text-base leading-tight"
+                  >
+                    ¿Estás seguro de eliminar esta venta?
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Confirmación de seguridad para evitar pérdida accidental
+                    Confirmación requerida para prevenir la eliminación accidental de datos
                   </p>
                 </div>
               </div>
@@ -756,15 +764,22 @@ export function SalesHistoryList() {
                 onClick={() => !isDeleting && setDeletingSaleId(null)}
                 disabled={isDeleting}
                 id="close-delete-modal-btn"
-                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors disabled:opacity-40"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors disabled:opacity-40 cursor-pointer"
                 aria-label="Cerrar modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Contenido con detalle del registro a eliminar */}
+            {/* Contenido con mensaje claro y detalle del registro a eliminar */}
             <div className="p-5 space-y-4">
+              <p
+                id="delete-confirm-modal-description"
+                className="text-xs text-slate-700 leading-relaxed"
+              >
+                Por favor, confirma que deseas eliminar permanentemente este registro de venta de la lista de historial. Esta medida evita el borrado accidental de información:
+              </p>
+
               <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -863,7 +878,7 @@ export function SalesHistoryList() {
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Eliminar Registro</span>
+                    <span>Confirmar eliminación</span>
                   </>
                 )}
               </button>

@@ -6,12 +6,44 @@ import {
   Sale,
 } from '@/types';
 
+export type ThemeMode = 'light' | 'dark';
+
 export const STORAGE_KEYS = {
   SETTINGS: 'team_sales_tracker_settings_v1',
   SALES: 'team_sales_tracker_sales_v1',
   PRODUCTS: 'team_sales_tracker_products_v1',
   VERSION: 'team_sales_tracker_version_v1',
+  THEME: 'team_sales_tracker_theme_v1',
 };
+
+export function getStoredTheme(): ThemeMode {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return 'light';
+  }
+  try {
+    const saved =
+      localStorage.getItem(STORAGE_KEYS.THEME) ||
+      localStorage.getItem('theme');
+    if (saved === 'dark' || saved === 'light') {
+      return saved;
+    }
+    return 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+export function saveStoredTheme(theme: ThemeMode): void {
+  if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
+    return;
+  }
+  try {
+    localStorage.setItem(STORAGE_KEYS.THEME, theme);
+    localStorage.setItem('theme', theme);
+  } catch (e) {
+    console.error('Error saving theme to localStorage:', e);
+  }
+}
 
 export const DEFAULT_MILESTONE_NOTIFICATIONS: MilestoneNotificationsConfig = {
   80: {
@@ -29,17 +61,20 @@ export const DEFAULT_MILESTONE_NOTIFICATIONS: MilestoneNotificationsConfig = {
 };
 
 export const DEFAULT_PRODUCTS: Product[] = [
-  { id: 'p1', name: 'HONOR Magic7 Pro', category: 'HIGH', bonus: 25, isActive: true },
-  { id: 'p2', name: 'HONOR 600 Pro', category: 'HIGH', bonus: 20, isActive: true },
-  { id: 'p3', name: 'HONOR 600', category: 'HIGH', bonus: 10, isActive: true },
-  { id: 'p4', name: 'HONOR 200 Pro', category: 'HIGH', bonus: 15, isActive: true },
-  { id: 'p5', name: 'HONOR 200', category: 'MID', bonus: 10, isActive: true },
-  { id: 'p6', name: 'HONOR 400', category: 'MID', bonus: 5, isActive: true },
-  { id: 'p7', name: 'HONOR 90', category: 'MID', bonus: 5, isActive: true },
-  { id: 'p8', name: 'HONOR 90 Lite', category: 'ENTRY', bonus: 5, isActive: true },
-  { id: 'p9', name: 'HONOR X8b', category: 'ENTRY', bonus: 5, isActive: true },
-  { id: 'p10', name: 'HONOR X7b', category: 'ENTRY', bonus: 3, isActive: true },
-  { id: 'p11', name: 'HONOR X6a', category: 'ENTRY', bonus: 0, isActive: true },
+  { id: 'p1', name: 'HONOR Magic7 Pro', category: 'HIGH', deviceType: 'MOBILE', bonus: 25, isActive: true },
+  { id: 'p2', name: 'HONOR 600 Pro', category: 'HIGH', deviceType: 'MOBILE', bonus: 20, isActive: true },
+  { id: 'p3', name: 'HONOR 600', category: 'HIGH', deviceType: 'MOBILE', bonus: 10, isActive: true },
+  { id: 'p4', name: 'HONOR 200 Pro', category: 'HIGH', deviceType: 'MOBILE', bonus: 15, isActive: true },
+  { id: 'p5', name: 'HONOR 200', category: 'MID', deviceType: 'MOBILE', bonus: 10, isActive: true },
+  { id: 'p6', name: 'HONOR 400', category: 'MID', deviceType: 'MOBILE', bonus: 5, isActive: true },
+  { id: 'p7', name: 'HONOR 90', category: 'MID', deviceType: 'MOBILE', bonus: 5, isActive: true },
+  { id: 'p8', name: 'HONOR 90 Lite', category: 'ENTRY', deviceType: 'MOBILE', bonus: 5, isActive: true },
+  { id: 'p9', name: 'HONOR X8b', category: 'ENTRY', deviceType: 'MOBILE', bonus: 5, isActive: true },
+  { id: 'p10', name: 'HONOR X7b', category: 'ENTRY', deviceType: 'MOBILE', bonus: 3, isActive: true },
+  { id: 'p11', name: 'HONOR X6a', category: 'ENTRY', deviceType: 'MOBILE', bonus: 0, isActive: true },
+  { id: 'p12', name: 'HONOR MagicPad 2', category: 'HIGH', deviceType: 'TABLET', bonus: 20, isActive: true },
+  { id: 'p13', name: 'HONOR Pad 9', category: 'MID', deviceType: 'TABLET', bonus: 10, isActive: true },
+  { id: 'p14', name: 'HONOR Pad X8a', category: 'ENTRY', deviceType: 'TABLET', bonus: 5, isActive: true },
 ];
 
 export function getDefaultSettings(): CampaignSettings {
@@ -133,25 +168,25 @@ export function generateDemoSales(settings: CampaignSettings): Sale[] {
   const month = String(settings.month).padStart(2, '0');
 
   return [
-    { id: 'demo-1', date: `${year}-${month}-02`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', quantity: 2, unitBonus: 25, totalBonus: 50, isDemo: true, createdAt: '2026-09-02T11:00:00Z' },
-    { id: 'demo-2', date: `${year}-${month}-03`, productId: 'p5', productName: 'HONOR 200', category: 'MID', quantity: 3, unitBonus: 10, totalBonus: 30, isDemo: true, createdAt: '2026-09-03T12:00:00Z' },
-    { id: 'demo-3', date: `${year}-${month}-04`, productId: 'p8', productName: 'HONOR 90 Lite', category: 'ENTRY', quantity: 2, unitBonus: 5, totalBonus: 10, isDemo: true, createdAt: '2026-09-04T16:30:00Z' },
-    { id: 'demo-4', date: `${year}-${month}-05`, productId: 'p2', productName: 'HONOR 600 Pro', category: 'HIGH', quantity: 1, unitBonus: 20, totalBonus: 20, isDemo: true, createdAt: '2026-09-05T14:15:00Z' },
-    { id: 'demo-5', date: `${year}-${month}-06`, productId: 'p6', productName: 'HONOR 400', category: 'MID', quantity: 4, unitBonus: 5, totalBonus: 20, isDemo: true, createdAt: '2026-09-06T18:00:00Z' },
-    { id: 'demo-6', date: `${year}-${month}-08`, productId: 'p9', productName: 'HONOR X8b', category: 'ENTRY', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-08T11:45:00Z' },
-    { id: 'demo-7', date: `${year}-${month}-09`, productId: 'p3', productName: 'HONOR 600', category: 'HIGH', quantity: 2, unitBonus: 10, totalBonus: 20, isDemo: true, createdAt: '2026-09-09T17:10:00Z' },
-    { id: 'demo-8', date: `${year}-${month}-10`, productId: 'p5', productName: 'HONOR 200', category: 'MID', quantity: 3, unitBonus: 10, totalBonus: 30, isDemo: true, createdAt: '2026-09-10T13:20:00Z' },
-    { id: 'demo-9', date: `${year}-${month}-11`, productId: 'p10', productName: 'HONOR X7b', category: 'ENTRY', quantity: 4, unitBonus: 3, totalBonus: 12, isDemo: true, createdAt: '2026-09-11T19:00:00Z' },
-    { id: 'demo-10', date: `${year}-${month}-12`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', quantity: 2, unitBonus: 25, totalBonus: 50, isDemo: true, createdAt: '2026-09-12T15:40:00Z' },
-    { id: 'demo-11', date: `${year}-${month}-13`, productId: 'p7', productName: 'HONOR 90', category: 'MID', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-13T16:00:00Z' },
-    { id: 'demo-12', date: `${year}-${month}-15`, productId: 'p8', productName: 'HONOR 90 Lite', category: 'ENTRY', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-15T12:30:00Z' },
-    { id: 'demo-13', date: `${year}-${month}-16`, productId: 'p2', productName: 'HONOR 600 Pro', category: 'HIGH', quantity: 2, unitBonus: 20, totalBonus: 40, isDemo: true, createdAt: '2026-09-16T17:45:00Z' },
-    { id: 'demo-14', date: `${year}-${month}-17`, productId: 'p5', productName: 'HONOR 200', category: 'MID', quantity: 4, unitBonus: 10, totalBonus: 40, isDemo: true, createdAt: '2026-09-17T14:50:00Z' },
-    { id: 'demo-15', date: `${year}-${month}-18`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', quantity: 3, unitBonus: 25, totalBonus: 75, isDemo: true, createdAt: '2026-09-18T18:15:00Z' },
-    { id: 'demo-16', date: `${year}-${month}-19`, productId: 'p9', productName: 'HONOR X8b', category: 'ENTRY', quantity: 4, unitBonus: 5, totalBonus: 20, isDemo: true, createdAt: '2026-09-19T13:00:00Z' },
-    { id: 'demo-17', date: `${year}-${month}-20`, productId: 'p6', productName: 'HONOR 400', category: 'MID', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-20T19:30:00Z' },
-    { id: 'demo-18', date: `${year}-${month}-21`, productId: 'p4', productName: 'HONOR 200 Pro', category: 'HIGH', quantity: 2, unitBonus: 15, totalBonus: 30, isDemo: true, createdAt: '2026-09-21T11:20:00Z' },
-    { id: 'demo-19', date: `${year}-${month}-22`, productId: 'p5', productName: 'HONOR 200', category: 'MID', quantity: 1, unitBonus: 10, totalBonus: 10, isDemo: true, createdAt: '2026-09-22T10:15:00Z' },
+    { id: 'demo-1', date: `${year}-${month}-02`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', deviceType: 'MOBILE', quantity: 2, unitBonus: 25, totalBonus: 50, isDemo: true, createdAt: '2026-09-02T11:00:00Z' },
+    { id: 'demo-2', date: `${year}-${month}-03`, productId: 'p5', productName: 'HONOR 200', category: 'MID', deviceType: 'MOBILE', quantity: 3, unitBonus: 10, totalBonus: 30, isDemo: true, createdAt: '2026-09-03T12:00:00Z' },
+    { id: 'demo-3', date: `${year}-${month}-04`, productId: 'p8', productName: 'HONOR 90 Lite', category: 'ENTRY', deviceType: 'MOBILE', quantity: 2, unitBonus: 5, totalBonus: 10, isDemo: true, createdAt: '2026-09-04T16:30:00Z' },
+    { id: 'demo-4', date: `${year}-${month}-05`, productId: 'p13', productName: 'HONOR Pad 9', category: 'MID', deviceType: 'TABLET', quantity: 1, unitBonus: 10, totalBonus: 10, isDemo: true, createdAt: '2026-09-05T14:15:00Z' },
+    { id: 'demo-5', date: `${year}-${month}-06`, productId: 'p6', productName: 'HONOR 400', category: 'MID', deviceType: 'MOBILE', quantity: 4, unitBonus: 5, totalBonus: 20, isDemo: true, createdAt: '2026-09-06T18:00:00Z' },
+    { id: 'demo-6', date: `${year}-${month}-08`, productId: 'p9', productName: 'HONOR X8b', category: 'ENTRY', deviceType: 'MOBILE', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-08T11:45:00Z' },
+    { id: 'demo-7', date: `${year}-${month}-09`, productId: 'p3', productName: 'HONOR 600', category: 'HIGH', deviceType: 'MOBILE', quantity: 2, unitBonus: 10, totalBonus: 20, isDemo: true, createdAt: '2026-09-09T17:10:00Z' },
+    { id: 'demo-8', date: `${year}-${month}-10`, productId: 'p14', productName: 'HONOR Pad X8a', category: 'ENTRY', deviceType: 'TABLET', quantity: 2, unitBonus: 5, totalBonus: 10, isDemo: true, createdAt: '2026-09-10T13:20:00Z' },
+    { id: 'demo-9', date: `${year}-${month}-11`, productId: 'p10', productName: 'HONOR X7b', category: 'ENTRY', deviceType: 'MOBILE', quantity: 4, unitBonus: 3, totalBonus: 12, isDemo: true, createdAt: '2026-09-11T19:00:00Z' },
+    { id: 'demo-10', date: `${year}-${month}-12`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', deviceType: 'MOBILE', quantity: 2, unitBonus: 25, totalBonus: 50, isDemo: true, createdAt: '2026-09-12T15:40:00Z' },
+    { id: 'demo-11', date: `${year}-${month}-13`, productId: 'p7', productName: 'HONOR 90', category: 'MID', deviceType: 'MOBILE', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-13T16:00:00Z' },
+    { id: 'demo-12', date: `${year}-${month}-15`, productId: 'p12', productName: 'HONOR MagicPad 2', category: 'HIGH', deviceType: 'TABLET', quantity: 1, unitBonus: 20, totalBonus: 20, isDemo: true, createdAt: '2026-09-15T12:30:00Z' },
+    { id: 'demo-13', date: `${year}-${month}-16`, productId: 'p2', productName: 'HONOR 600 Pro', category: 'HIGH', deviceType: 'MOBILE', quantity: 2, unitBonus: 20, totalBonus: 40, isDemo: true, createdAt: '2026-09-16T17:45:00Z' },
+    { id: 'demo-14', date: `${year}-${month}-17`, productId: 'p5', productName: 'HONOR 200', category: 'MID', deviceType: 'MOBILE', quantity: 4, unitBonus: 10, totalBonus: 40, isDemo: true, createdAt: '2026-09-17T14:50:00Z' },
+    { id: 'demo-15', date: `${year}-${month}-18`, productId: 'p1', productName: 'HONOR Magic7 Pro', category: 'HIGH', deviceType: 'MOBILE', quantity: 3, unitBonus: 25, totalBonus: 75, isDemo: true, createdAt: '2026-09-18T18:15:00Z' },
+    { id: 'demo-16', date: `${year}-${month}-19`, productId: 'p13', productName: 'HONOR Pad 9', category: 'MID', deviceType: 'TABLET', quantity: 2, unitBonus: 10, totalBonus: 20, isDemo: true, createdAt: '2026-09-19T13:00:00Z' },
+    { id: 'demo-17', date: `${year}-${month}-20`, productId: 'p6', productName: 'HONOR 400', category: 'MID', deviceType: 'MOBILE', quantity: 3, unitBonus: 5, totalBonus: 15, isDemo: true, createdAt: '2026-09-20T19:30:00Z' },
+    { id: 'demo-18', date: `${year}-${month}-21`, productId: 'p4', productName: 'HONOR 200 Pro', category: 'HIGH', deviceType: 'MOBILE', quantity: 2, unitBonus: 15, totalBonus: 30, isDemo: true, createdAt: '2026-09-21T11:20:00Z' },
+    { id: 'demo-19', date: `${year}-${month}-22`, productId: 'p5', productName: 'HONOR 200', category: 'MID', deviceType: 'MOBILE', quantity: 1, unitBonus: 10, totalBonus: 10, isDemo: true, createdAt: '2026-09-22T10:15:00Z' },
   ];
 }
 

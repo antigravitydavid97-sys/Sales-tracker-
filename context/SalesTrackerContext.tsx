@@ -5,15 +5,19 @@ import {
   CampaignSettings,
   CategoryId,
   DashboardStats,
+  DeviceType,
   Product,
   Sale,
 } from '@/types';
-import { calculateDashboardStats } from '@/lib/calculations';
+import { calculateDashboardStats, resolveProductDeviceType } from '@/lib/calculations';
 import { exportSalesToCSV, CSVExportOptions } from '@/lib/csv';
 import {
   DEFAULT_MILESTONE_NOTIFICATIONS,
   getDefaultSettings,
+  getStoredTheme,
   repository,
+  saveStoredTheme,
+  ThemeMode,
 } from '@/lib/storage';
 import {
   getAdminSession,
@@ -50,6 +54,7 @@ interface SalesTrackerContextType {
     productId: string;
     productName: string;
     category: CategoryId;
+    deviceType?: DeviceType;
     quantity: number;
     date: string;
     unitBonus?: number;
@@ -76,8 +81,11 @@ interface SalesTrackerContextType {
   clearDemoData: () => Promise<void>;
   resetToDefaults: () => Promise<void>;
 
-  // Feedback UI
+  // Feedback UI & Tema
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'milestone') => void;
+  theme: ThemeMode;
+  setTheme: (newTheme: ThemeMode) => void;
+  toggleTheme: () => void;
 }
 
 const SalesTrackerContext = createContext<SalesTrackerContextType | null>(null);
@@ -129,11 +137,28 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevMilestoneRef = useRef<80 | 100 | 120 | null | undefined>(undefined);
 
-  // Estado de administración
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  // Estado de administración y tema global
+  const [isAdmin, setIsAdmin] = useState<boolean>(true);
   const [adminUser, setAdminUser] = useState<string>('Administrador');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [loginModalReason, setLoginModalReason] = useState<string>('');
+  const [theme, setThemeState] = useState<ThemeMode>('light');
+
+  const applyThemeToDOM = useCallback((mode: ThemeMode) => {
+    if (typeof document === 'undefined') return;
+    const isDark = mode === 'dark';
+    document.documentElement.classList.toggle('dark', isDark);
+    document.documentElement.setAttribute('data-theme', mode);
+    document.documentElement.style.colorScheme = mode;
+    document.body.classList.toggle('dark', isDark);
+    if (isDark) {
+      document.body.classList.remove('bg-slate-50', 'text-slate-900');
+      document.body.classList.add('bg-slate-950', 'text-slate-100');
+    } else {
+      document.body.classList.remove('bg-slate-950', 'text-slate-100');
+      document.body.classList.add('bg-slate-50', 'text-slate-900');
+    }
+  }, []);
 
   const dismissToast = useCallback(() => {
     if (toastTimerRef.current) {
@@ -157,6 +182,24 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
     },
     []
   );
+
+  const setTheme = useCallback(
+    (newTheme: ThemeMode) => {
+      setThemeState(newTheme);
+      saveStoredTheme(newTheme);
+      applyThemeToDOM(newTheme);
+      showToast(
+        newTheme === 'dark' ? 'Modo Oscuro activado' : 'Modo Claro activado',
+        'info'
+      );
+    },
+    [applyThemeToDOM, showToast]
+  );
+
+  const toggleTheme = useCallback(() => {
+    const nextTheme: ThemeMode = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+  }, [theme, setTheme]);
 
   // Control de modales y autenticación admin
   const openLoginModal = useCallback((reason?: string) => {
@@ -229,6 +272,11 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
       try {
         setLoading(true);
 
+        // Cargar preferencia de tema desde localStorage
+        const storedTheme = getStoredTheme();
+        setThemeState(storedTheme);
+        applyThemeToDOM(storedTheme);
+
         // Cargar sesión de administrador si existe en localStorage
         const adminSession = getAdminSession();
         setIsAdmin(adminSession.isAuthenticated);
@@ -273,7 +321,7 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
       }
     }
     initData();
-  }, [showToast]);
+  }, [showToast, applyThemeToDOM]);
 
   // Recálculo dinámico de estadísticas y proyecciones
   const stats = useMemo(() => {
@@ -309,6 +357,7 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
       productId: string;
       productName: string;
       category: CategoryId;
+      deviceType?: DeviceType;
       quantity: number;
       date: string;
       unitBonus?: number;
@@ -319,6 +368,8 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
       const product = products.find((p) => p.id === params.productId);
       const unitBonus = params.unitBonus !== undefined ? params.unitBonus : (product?.bonus || 0);
       const totalBonus = unitBonus * params.quantity;
+      const resolvedDeviceType =
+        params.deviceType || resolveProductDeviceType(params.productName, product?.deviceType);
 
       const newSale: Sale = {
         id: 'sale-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7),
@@ -326,6 +377,7 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         productId: params.productId || 'custom',
         productName: params.productName,
         category: params.category,
+        deviceType: resolvedDeviceType,
         quantity: params.quantity,
         unitBonus,
         totalBonus,
@@ -377,6 +429,7 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         id: 'generic-' + category.toLowerCase(),
         name: `Dispositivo ${category}`,
         category,
+        deviceType: 'MOBILE' as DeviceType,
         bonus: 0,
       };
 
@@ -384,6 +437,7 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         productId: categoryProduct.id,
         productName: categoryProduct.name,
         category,
+        deviceType: resolveProductDeviceType(categoryProduct.name, categoryProduct.deviceType),
         quantity: 1,
         date: dateStr,
         unitBonus: categoryProduct.bonus,
@@ -666,6 +720,9 @@ export function SalesTrackerProvider({ children }: { children: React.ReactNode }
         clearDemoData,
         resetToDefaults,
         showToast,
+        theme,
+        setTheme,
+        toggleTheme,
       }}
     >
       {children}

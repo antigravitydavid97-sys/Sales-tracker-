@@ -19,8 +19,11 @@ import {
   Plus,
   Lock,
   ShieldCheck,
+  Smartphone,
+  Tablet,
 } from 'lucide-react';
-import { CategoryId, Product } from '@/types';
+import { CategoryId, DeviceType, Product } from '@/types';
+import { resolveProductDeviceType } from '@/lib/calculations';
 import { useSalesTracker } from '@/context/SalesTrackerContext';
 
 interface RegisterSaleFormProps {
@@ -30,7 +33,8 @@ interface RegisterSaleFormProps {
 
 export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFormProps) {
   const router = useRouter();
-  const { products, addSale, quickAddSale, quickSubtractSale, showToast, isAdmin, openLoginModal } = useSalesTracker();
+  const { products, stats, addSale, quickAddSale, quickSubtractSale, showToast, isAdmin, openLoginModal, theme } = useSalesTracker();
+  const isDark = theme === 'dark';
 
   // Fecha por defecto hoy
   const todayStr = () => {
@@ -42,10 +46,12 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
   const [date, setDate] = useState<string>(todayStr());
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [category, setCategory] = useState<CategoryId>(initialCategory || 'HIGH');
+  const [deviceTypeOverride, setDeviceTypeOverride] = useState<DeviceType | null>(null);
   const [quantity, setQuantity] = useState<number>(1);
   const [notes, setNotes] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [recentQuickCat, setRecentQuickCat] = useState<CategoryId | null>(null);
 
   // Filtrar productos activos
   const activeProducts = products.filter((p) => p.isActive !== false);
@@ -53,13 +59,17 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
   const defaultProduct = (initialCategory ? activeProducts.find((p) => p.category === initialCategory) : null) || activeProducts[0];
   const effectiveProductId = selectedProductId || defaultProduct?.id || '';
   const selectedProduct = activeProducts.find((p) => p.id === effectiveProductId);
+  const effectiveDeviceType: DeviceType =
+    deviceTypeOverride ||
+    resolveProductDeviceType(selectedProduct?.name || '', selectedProduct?.deviceType);
 
-  // Al seleccionar producto, sincronizar automáticamente su gama
+  // Al seleccionar producto, sincronizar automáticamente su gama y tipo de dispositivo
   const handleProductChange = (productId: string) => {
     setSelectedProductId(productId);
     const prod = activeProducts.find((p) => p.id === productId);
     if (prod) {
       setCategory(prod.category);
+      setDeviceTypeOverride(resolveProductDeviceType(prod.name, prod.deviceType));
     }
   };
 
@@ -92,6 +102,7 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
         productId: effectiveProductId,
         productName: selectedProduct?.name || 'Producto',
         category,
+        deviceType: effectiveDeviceType,
         quantity: effectiveQuantity,
         date,
         unitBonus,
@@ -120,7 +131,16 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
   };
 
   const handleQuickAdd = async (cat: CategoryId) => {
+    setCategory(cat);
+    const catProd = activeProducts.find((p) => p.category === cat);
+    if (catProd) {
+      setSelectedProductId(catProd.id);
+    }
     await quickAddSale(cat);
+    setRecentQuickCat(cat);
+    setTimeout(() => {
+      setRecentQuickCat((prev) => (prev === cat ? null : prev));
+    }, 900);
   };
 
   const handleQuickSubtract = async (cat: CategoryId) => {
@@ -164,99 +184,165 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
         </div>
       )}
 
-      {/* Botones rápidos de registro en 1 toque (Sumar / Restar) */}
+      {/* Botones rápidos de registro en 1 toque (+HIGH, +MID, +ENTRY) */}
       <div
         id="quick-sale-buttons-bar"
-        className="bg-white rounded-2xl p-4 md:p-5 border border-slate-200/80 shadow-xs"
+        className={`rounded-2xl p-4 md:p-5 border shadow-xs transition-colors ${
+          isDark
+            ? 'bg-slate-900 border-slate-800 text-slate-100'
+            : 'bg-white border-slate-200/80 text-slate-900'
+        }`}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3.5">
           <div className="flex items-center gap-2">
             <Zap className="w-4 h-4 text-amber-500 fill-amber-500" />
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-              Ajuste Rápido de 1 Toque (Hoy)
+            <h2 className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+              Acción Rápida (+1 ud por Categoría)
             </h2>
           </div>
-          <span className="text-[11px] text-slate-600 font-medium">Usa [-] para restar o [+] para sumar</span>
+          <span className={`text-[11px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+            Pulsa +HIGH, +MID o +ENTRY para sumar 1 unidad directamente
+          </span>
         </div>
 
         <div className="grid grid-cols-3 gap-2.5">
           {/* HIGH */}
-          <div className="flex flex-col rounded-xl bg-blue-50/70 border border-blue-200 p-2.5 text-center">
-            <span className="text-[10px] font-bold text-blue-700 tracking-wider mb-2">GAMA HIGH</span>
-            <div className="grid grid-cols-2 gap-1.5">
+          <div
+            className={`flex flex-col rounded-xl border p-3 text-center ${
+              isDark ? 'bg-blue-950/30 border-blue-800/70' : 'bg-blue-50/70 border-blue-200'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-[10px] font-bold tracking-wider ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>
+                GAMA HIGH
+              </span>
+              <span
+                id="quick-sale-count-high"
+                className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                  isDark ? 'bg-blue-900/60 text-blue-200' : 'bg-blue-100 text-blue-800'
+                }`}
+              >
+                {stats.categoriesStats.HIGH.currentSales} uds
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleQuickSubtract('HIGH')}
                 id="quick-subtract-high"
-                className="py-2 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-blue-100 font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                className={`px-2.5 py-2.5 rounded-lg border font-extrabold text-xs flex items-center justify-center transition-all active:scale-95 shadow-2xs cursor-pointer ${
+                  isDark
+                    ? 'bg-slate-800 hover:bg-rose-950/60 text-rose-400 border-slate-700'
+                    : 'bg-white hover:bg-rose-50 text-rose-700 border-blue-100'
+                }`}
                 title="Restar 1 HIGH"
                 aria-label="Restar 1 unidad HIGH"
               >
-                <Minus className="w-4 h-4" />
+                <Minus className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickAdd('HIGH')}
                 id="quick-btn-high"
-                className="py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
-                title="Añadir 1 HIGH"
-                aria-label="Añadir 1 unidad HIGH"
+                className="flex-1 py-2.5 px-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all active:scale-95 shadow-xs shadow-blue-600/25 cursor-pointer"
+                title="Añadir 1 unidad HIGH"
               >
-                <Plus className="w-4 h-4" />
+                {recentQuickCat === 'HIGH' ? <Check className="w-3.5 h-3.5 shrink-0" /> : null}
+                <span>+HIGH</span>
               </button>
             </div>
           </div>
 
           {/* MID */}
-          <div className="flex flex-col rounded-xl bg-emerald-50/70 border border-emerald-200 p-2.5 text-center">
-            <span className="text-[10px] font-bold text-emerald-700 tracking-wider mb-2">GAMA MID</span>
-            <div className="grid grid-cols-2 gap-1.5">
+          <div
+            className={`flex flex-col rounded-xl border p-3 text-center ${
+              isDark ? 'bg-emerald-950/30 border-emerald-800/70' : 'bg-emerald-50/70 border-emerald-200'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-[10px] font-bold tracking-wider ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                GAMA MID
+              </span>
+              <span
+                id="quick-sale-count-mid"
+                className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                  isDark ? 'bg-emerald-900/60 text-emerald-200' : 'bg-emerald-100 text-emerald-800'
+                }`}
+              >
+                {stats.categoriesStats.MID.currentSales} uds
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleQuickSubtract('MID')}
                 id="quick-subtract-mid"
-                className="py-2 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-emerald-100 font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                className={`px-2.5 py-2.5 rounded-lg border font-extrabold text-xs flex items-center justify-center transition-all active:scale-95 shadow-2xs cursor-pointer ${
+                  isDark
+                    ? 'bg-slate-800 hover:bg-rose-950/60 text-rose-400 border-slate-700'
+                    : 'bg-white hover:bg-rose-50 text-rose-700 border-emerald-100'
+                }`}
                 title="Restar 1 MID"
                 aria-label="Restar 1 unidad MID"
               >
-                <Minus className="w-4 h-4" />
+                <Minus className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickAdd('MID')}
                 id="quick-btn-mid"
-                className="py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
-                title="Añadir 1 MID"
-                aria-label="Añadir 1 unidad MID"
+                className="flex-1 py-2.5 px-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all active:scale-95 shadow-xs shadow-emerald-600/25 cursor-pointer"
+                title="Añadir 1 unidad MID"
               >
-                <Plus className="w-4 h-4" />
+                {recentQuickCat === 'MID' ? <Check className="w-3.5 h-3.5 shrink-0" /> : null}
+                <span>+MID</span>
               </button>
             </div>
           </div>
 
           {/* ENTRY */}
-          <div className="flex flex-col rounded-xl bg-purple-50/70 border border-purple-200 p-2.5 text-center">
-            <span className="text-[10px] font-bold text-purple-700 tracking-wider mb-2">GAMA ENTRY</span>
-            <div className="grid grid-cols-2 gap-1.5">
+          <div
+            className={`flex flex-col rounded-xl border p-3 text-center ${
+              isDark ? 'bg-purple-950/30 border-purple-800/70' : 'bg-purple-50/70 border-purple-200'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-[10px] font-bold tracking-wider ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                GAMA ENTRY
+              </span>
+              <span
+                id="quick-sale-count-entry"
+                className={`text-[11px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                  isDark ? 'bg-purple-900/60 text-purple-200' : 'bg-purple-100 text-purple-800'
+                }`}
+              >
+                {stats.categoriesStats.ENTRY.currentSales} uds
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => handleQuickSubtract('ENTRY')}
                 id="quick-subtract-entry"
-                className="py-2 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-purple-100 font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
+                className={`px-2.5 py-2.5 rounded-lg border font-extrabold text-xs flex items-center justify-center transition-all active:scale-95 shadow-2xs cursor-pointer ${
+                  isDark
+                    ? 'bg-slate-800 hover:bg-rose-950/60 text-rose-400 border-slate-700'
+                    : 'bg-white hover:bg-rose-50 text-rose-700 border-purple-100'
+                }`}
                 title="Restar 1 ENTRY"
                 aria-label="Restar 1 unidad ENTRY"
               >
-                <Minus className="w-4 h-4" />
+                <Minus className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
                 onClick={() => handleQuickAdd('ENTRY')}
                 id="quick-btn-entry"
-                className="py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-sm flex items-center justify-center transition-all active:scale-95 shadow-2xs"
-                title="Añadir 1 ENTRY"
-                aria-label="Añadir 1 unidad ENTRY"
+                className="flex-1 py-2.5 px-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1 transition-all active:scale-95 shadow-xs shadow-purple-600/25 cursor-pointer"
+                title="Añadir 1 unidad ENTRY"
               >
-                <Plus className="w-4 h-4" />
+                {recentQuickCat === 'ENTRY' ? <Check className="w-3.5 h-3.5 shrink-0" /> : null}
+                <span>+ENTRY</span>
               </button>
             </div>
           </div>
@@ -373,10 +459,50 @@ export function RegisterSaleForm({ initialCategory, onSuccess }: RegisterSaleFor
           >
             {activeProducts.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name} — [{p.category}] {p.bonus > 0 ? `(${p.bonus}€ bonus)` : ''}
+                {p.name} — [{p.category} • {resolveProductDeviceType(p.name, p.deviceType) === 'TABLET' ? 'Tablet' : 'Móvil'}] {p.bonus > 0 ? `(${p.bonus}€ bonus)` : ''}
               </option>
             ))}
           </select>
+        </div>
+
+        {/* 2.5 Tipo de Dispositivo (Móvil vs Tablet) */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+            {effectiveDeviceType === 'TABLET' ? (
+              <Tablet className="w-3.5 h-3.5 text-violet-600" />
+            ) : (
+              <Smartphone className="w-3.5 h-3.5 text-blue-600" />
+            )}
+            <span>Tipo de Dispositivo</span>
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              id="select-device-mobile"
+              onClick={() => setDeviceTypeOverride('MOBILE')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                effectiveDeviceType === 'MOBILE'
+                  ? 'bg-blue-600 border-blue-600 text-white shadow-xs shadow-blue-500/30'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Móvil</span>
+            </button>
+            <button
+              type="button"
+              id="select-device-tablet"
+              onClick={() => setDeviceTypeOverride('TABLET')}
+              className={`py-2 px-3 rounded-xl text-xs font-bold border flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                effectiveDeviceType === 'TABLET'
+                  ? 'bg-violet-600 border-violet-600 text-white shadow-xs shadow-violet-500/30'
+                  : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+            >
+              <Tablet className="w-3.5 h-3.5" />
+              <span>Tablet</span>
+            </button>
+          </div>
         </div>
 
         {/* 3. Gama (Autocompletada y editable) */}

@@ -1,5 +1,7 @@
 export type CategoryId = 'HIGH' | 'MID' | 'ENTRY';
 
+export type DeviceType = 'MOBILE' | 'TABLET';
+
 export interface CategoryConfig {
   id: CategoryId;
   name: string;
@@ -19,6 +21,7 @@ export interface Product {
   id: string;
   name: string;
   category: CategoryId;
+  deviceType?: DeviceType;    // 'MOBILE' (Móvil) | 'TABLET' (Tablet)
   bonus: number;              // Bonus adicional por unidad vendida (€)
   isActive?: boolean;
 }
@@ -29,6 +32,7 @@ export interface Sale {
   productId: string;
   productName: string;
   category: CategoryId;
+  deviceType?: DeviceType;    // 'MOBILE' (Móvil) | 'TABLET' (Tablet)
   quantity: number;
   unitBonus: number;          // Bonus unitario en el momento de la venta
   totalBonus: number;         // quantity * unitBonus
